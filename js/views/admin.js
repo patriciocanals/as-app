@@ -1,9 +1,10 @@
 import * as store from '../store.js';
-import { $, $$, esc, airport, allAirports, timeSelect, readTime } from '../util.js';
+import { $, $$, esc, airport, allAirports, timeSelect, readTime, todSelect, readTod } from '../util.js';
 import { formatHM, REFUEL_OPTIONS, calculate, autoSchedule, CLASS_NAMES } from '../calc.js';
 import { DAY_LABELS, seatSummary, isConfigured } from '../schedule.js';
 import { AIRCRAFT_GROUPS, aircraftById } from '../aircraft.js';
 import { go, toast, applyBrand, switchUrl } from '../nav.js';
+import * as sync from '../sync.js';
 
 const TABS = [['routes', 'Rutas'], ['airline', 'Aerolínea'], ['data', 'Datos']];
 const CLS = ['F', 'B', 'W', 'Y'];
@@ -56,36 +57,102 @@ function airline(el) {
     Object.assign(store.get().airline, { name: f.name.value.trim(), code, tagline: f.tagline.value.trim(), color: f.color.value, currency: f.currency.value.trim() });
     store.save(); applyBrand(); airline(el); toast('Aerolínea guardada');
   });
-  $$('[data-del]', el).forEach((b) => b.addEventListener('click', () => {
+  $$('[data-del]', el).forEach((b) => b.addEventListener('click', async () => {
     const x = all.find((k) => k.id === b.dataset.del);
     if (!confirm(`¿Eliminar "${x.name}" con todas sus rutas y reservas? No se puede deshacer.`)) return;
-    const left = store.deleteAirline(x.id);
+    const left = await store.deleteAirline(x.id);
+    await sync.settle();
     // recarga con otra query para que el estado en memoria no reescriba lo borrado
     location.href = left.length ? switchUrl(x.id === cur ? left[0] : cur, '#/admin/airline') : `${location.pathname}?x=0#/`;
   }));
 }
 
-// ---------- Rutas ----------
+// ---------- Rutas (lista compacta: búsqueda, filtros, orden y paginación) ----------
+const PAGE = 20;
+const RV = { q: '', origin: '', model: '', status: '', sort: 'route', page: 1, open: new Set() };
+const DAYS_TXT = (days) => (days.length === 7 ? 'todos los días' : days.map((d) => DAY_LABELS[d]).join(' '));
+
 function routes(el) {
   const s = store.get();
+  const code = s.airline.code;
+  const origins = [...new Set(s.routes.map((r) => r.origin))].sort();
+  const models = [...new Set(s.routes.map((r) => r.aircraft?.name).filter(Boolean))].sort();
+  const pendingCount = s.routes.filter((r) => !isConfigured(r.aircraft?.config)).length;
+
   el.innerHTML = `
-  <div class="card table-wrap"><table>
-    <thead><tr><th>Ruta</th><th>Avión</th><th>Tiempos</th><th>Vuelos</th><th></th></tr></thead>
-    <tbody>${s.routes.map((r) => {
-      const ok = isConfigured(r.aircraft?.config);
-      return `<tr><td><strong>${r.origin} ⇄ ${r.dest}</strong><br><span class="muted">${esc(airport(r.origin).city)} – ${esc(airport(r.dest).city)}</span></td>
-      <td>${esc(r.aircraft?.name || '—')} <span class="muted">× ${r.aircraftCount || 1}</span><br>
-        ${ok ? `<span class="muted">${seatSummary(r.aircraft.config)}</span>` : '<span class="pending">Falta la configuración de asientos</span>'}</td>
-      <td>${formatHM(r.t1)} / ${formatHM(r.t2)} · R ${formatHM(r.r1)}</td>
-      <td>${r.rotations.map((x) => `${s.airline.code}${x.outNo}/${x.retNo}`).join(', ')}</td>
-      <td class="nowrap"><a class="btn ${ok ? 'btn-outline' : 'btn-primary'} btn-sm" href="#/admin/route/${r.id}">${ok ? 'Editar' : 'Configurar asientos'}</a> <button class="btn btn-link btn-sm" data-del="${r.id}">Borrar</button></td></tr>`;
-    }).join('') || '<tr><td colspan="5" class="muted">Sin rutas. Empieza por la calculadora.</td></tr>'}</tbody></table></div>
+  <div class="rt-toolbar card">
+    <input type="search" id="rq" placeholder="Buscar: MAD, Londres, A320, ${esc(code)}100…" value="${esc(RV.q)}" aria-label="Buscar rutas">
+    <select id="ro" aria-label="Origen"><option value="">Todos los orígenes</option>${origins.map((o) => `<option value="${o}" ${RV.origin === o ? 'selected' : ''}>${o} · ${esc(airport(o).city)}</option>`).join('')}</select>
+    <select id="rm" aria-label="Avión"><option value="">Todos los aviones</option>${models.map((m) => `<option ${RV.model === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+    <select id="rs" aria-label="Estado"><option value="">Todas</option><option value="ok" ${RV.status === 'ok' ? 'selected' : ''}>Operativas</option><option value="pending" ${RV.status === 'pending' ? 'selected' : ''}>Pendientes de asientos${pendingCount ? ` (${pendingCount})` : ''}</option></select>
+    <select id="rsort" aria-label="Ordenar"><option value="route" ${RV.sort === 'route' ? 'selected' : ''}>Ordenar: ruta</option><option value="aircraft" ${RV.sort === 'aircraft' ? 'selected' : ''}>Ordenar: avión</option><option value="pending" ${RV.sort === 'pending' ? 'selected' : ''}>Ordenar: pendientes primero</option><option value="rot" ${RV.sort === 'rot' ? 'selected' : ''}>Ordenar: más vuelos</option></select>
+  </div>
+  <div id="rlist"></div>
   <div class="row"><a class="btn btn-primary" href="#/calculator">Calcular y crear ruta</a><a class="btn btn-outline" href="#/admin/route/new">+ Ruta manual</a></div>`;
-  $$('[data-del]', el).forEach((b) => b.addEventListener('click', () => {
-    const r = s.routes.find((x) => x.id === b.dataset.del);
-    if (!confirm(`¿Borrar la ruta ${r.origin}-${r.dest}? Las reservas existentes se conservan.`)) return;
-    s.routes = s.routes.filter((x) => x.id !== r.id); store.save(); routes(el);
-  }));
+
+  const text = (r) => [r.origin, r.dest, airport(r.origin).city, airport(r.dest).city, r.aircraft?.name,
+    ...r.rotations.flatMap((x) => [`${code}${x.outNo}`, `${code}${x.retNo}`])].join(' ').toLowerCase();
+
+  const draw = () => {
+    let rows = s.routes.filter((r) => {
+      const ok = isConfigured(r.aircraft?.config);
+      return (!RV.q || RV.q.toLowerCase().split(/\s+/).every((t) => text(r).includes(t)))
+        && (!RV.origin || r.origin === RV.origin) && (!RV.model || r.aircraft?.name === RV.model)
+        && (!RV.status || (RV.status === 'ok') === ok);
+    });
+    const cmp = {
+      route: (a, b) => a.origin.localeCompare(b.origin) || a.dest.localeCompare(b.dest),
+      aircraft: (a, b) => String(a.aircraft?.name).localeCompare(String(b.aircraft?.name)) || a.origin.localeCompare(b.origin),
+      pending: (a, b) => Number(isConfigured(a.aircraft?.config)) - Number(isConfigured(b.aircraft?.config)) || a.origin.localeCompare(b.origin),
+      rot: (a, b) => b.rotations.length - a.rotations.length || a.origin.localeCompare(b.origin),
+    }[RV.sort];
+    rows = rows.sort(cmp);
+    const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+    RV.page = Math.min(RV.page, pages);
+    const slice = rows.slice((RV.page - 1) * PAGE, RV.page * PAGE);
+
+    $('#rlist', el).innerHTML = `
+    <p class="muted small rt-count">${rows.length} de ${s.routes.length} ruta${s.routes.length === 1 ? '' : 's'}${pendingCount ? ` · <span class="pending">${pendingCount} pendiente${pendingCount > 1 ? 's' : ''} de configurar</span>` : ''}</p>
+    <div class="card table-wrap rt-card"><table class="rt">
+      <thead><tr><th>Ruta</th><th>Avión</th><th class="hide-sm">Asientos</th><th class="hide-sm">T1 / T2</th><th>Vuelos</th><th></th></tr></thead>
+      <tbody>${slice.map((r) => {
+        const ok = isConfigured(r.aircraft?.config);
+        const open = RV.open.has(r.id);
+        return `<tr class="rt-row ${open ? 'open' : ''}" data-id="${r.id}">
+          <td><button class="exp" data-exp="${r.id}" aria-expanded="${open}" aria-label="Ver vuelos">${open ? '▾' : '▸'}</button>
+            <strong>${r.origin} ⇄ ${r.dest}</strong> <span class="muted hide-sm">${esc(airport(r.origin).city)} – ${esc(airport(r.dest).city)}</span></td>
+          <td>${esc(r.aircraft?.name || '—')} <span class="muted">×${r.aircraftCount || 1}</span></td>
+          <td class="hide-sm">${ok ? r.aircraft.config.filter((c) => c.count).map((c) => `${c.cls}${c.count}`).join(' ') : '<span class="pending">Pendiente</span>'}</td>
+          <td class="hide-sm muted">${formatHM(r.t1)} / ${formatHM(r.t2)}</td>
+          <td>${r.rotations.length}</td>
+          <td class="nowrap"><a class="btn ${ok ? 'btn-outline' : 'btn-primary'} btn-sm" href="#/admin/route/${r.id}">${ok ? 'Editar' : 'Configurar'}</a>
+            <button class="btn btn-link btn-sm" data-del="${r.id}" aria-label="Borrar ruta ${r.origin}-${r.dest}">✕</button></td></tr>
+          ${open ? `<tr class="rt-detail"><td colspan="6"><div class="chips-flights">${r.rotations.map((x) =>
+            `<span class="fchip"><b>${esc(code)}${x.outNo}/${x.retNo}</b> ${esc(x.outDep)} · ${DAYS_TXT(x.days)}</span>`).join('') || '<span class="muted">Sin vuelos programados</span>'}</div>
+            <p class="muted small">R1 ${formatHM(r.r1)} · Precios: ${Object.entries(r.prices).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v}`).join(' · ') || 'sin precios'}</p></td></tr>` : ''}`;
+      }).join('') || '<tr><td colspan="6" class="muted">Ninguna ruta coincide.</td></tr>'}</tbody></table></div>
+    ${pages > 1 ? `<nav class="pager" aria-label="Paginación">
+      <button class="btn btn-outline btn-sm" data-pg="${RV.page - 1}" ${RV.page === 1 ? 'disabled' : ''}>‹</button>
+      <span>Página ${RV.page} de ${pages}</span>
+      <button class="btn btn-outline btn-sm" data-pg="${RV.page + 1}" ${RV.page === pages ? 'disabled' : ''}>›</button></nav>` : ''}`;
+  };
+
+  const bind = (id, key, ev = 'change') => $(id, el).addEventListener(ev, (e) => { RV[key] = e.target.value; RV.page = 1; draw(); });
+  bind('#rq', 'q', 'input'); bind('#ro', 'origin'); bind('#rm', 'model'); bind('#rs', 'status'); bind('#rsort', 'sort');
+
+  $('#rlist', el).addEventListener('click', (e) => {
+    const exp = e.target.closest('[data-exp]');
+    const pg = e.target.closest('[data-pg]');
+    const del = e.target.closest('[data-del]');
+    if (exp) { RV.open.has(exp.dataset.exp) ? RV.open.delete(exp.dataset.exp) : RV.open.add(exp.dataset.exp); draw(); }
+    else if (pg && !pg.disabled) { RV.page = Number(pg.dataset.pg); draw(); }
+    else if (del) {
+      const r = s.routes.find((x) => x.id === del.dataset.del);
+      if (!confirm(`¿Borrar la ruta ${r.origin}-${r.dest}? Las reservas existentes se conservan.`)) return;
+      s.routes = s.routes.filter((x) => x.id !== r.id); store.save(); routes(el);
+    }
+  });
+  draw();
 }
 
 function nextNumber(s) {
@@ -123,6 +190,8 @@ function routeForm(el, id) {
       <label>Destino (IATA)<input name="d" list="apts" value="${esc(r.dest)}" maxlength="3" required style="text-transform:uppercase"></label>
     </div>
     <div id="newapts"></div>
+    <label>Imagen del destino (opcional)<input name="destimg" value="${esc(s.destImages?.[r.dest] || '')}" placeholder="Texto para buscar la foto (p. ej. Sagrada Familia) o una URL https://…"></label>
+    <p class="muted small" style="margin-top:-6px">Por defecto se busca automáticamente una foto de paisaje de la ciudad de destino.</p>
 
     <div class="row">
       <label>Modelo de avión<select name="model" required>
@@ -154,7 +223,7 @@ function routeForm(el, id) {
     <div class="table-wrap"><table id="rot"><thead><tr><th>Ida</th><th>Vuelta</th><th>Sale (ida)</th><th>Días</th><th></th></tr></thead><tbody></tbody></table></div>
     <div class="row"><button type="button" class="btn btn-outline btn-sm" id="addrot">+ Rotación</button>
       <details class="auto"><summary>Generar programación automática</summary>
-        <div class="row"><label>Primera salida<input type="time" id="g-t" value="08:00" step="300"></label>
+        <div class="row"><div class="field"><span class="lbl">Primera salida</span>${todSelect('08:00', 'id="g-t"')}</div>
         <label>Primer nº de vuelo<input type="number" id="g-num" value="${nextNumber(s)}"></label>
         <button type="button" class="btn btn-outline btn-sm" id="gen">Generar con los tiempos y nº de aviones de arriba</button></div></details></div>
     <p class="muted small" id="err" role="alert"></p>
@@ -168,7 +237,7 @@ function routeForm(el, id) {
     tbody.innerHTML = rows.map((x, i) => `<tr data-i="${i}">
       <td><input class="num" type="number" data-k="outNo" value="${x.outNo}"></td>
       <td><input class="num" type="number" data-k="retNo" value="${x.retNo}"></td>
-      <td><input type="time" step="300" data-k="outDep" value="${x.outDep}"></td>
+      <td>${todSelect(x.outDep, 'data-k="outDep"')}</td>
       <td class="days">${DAY_LABELS.map((l, d) => `<label class="day"><input type="checkbox" data-d="${d}" ${x.days.includes(d) ? 'checked' : ''}><span>${l}</span></label>`).join('')}</td>
       <td><button type="button" class="btn btn-link btn-sm" data-rm="${i}">✕</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Sin rotaciones.</td></tr>';
   };
@@ -176,6 +245,8 @@ function routeForm(el, id) {
   tbody.addEventListener('input', (e) => {
     const tr = e.target.closest('tr'); if (!tr) return;
     const x = rows[Number(tr.dataset.i)];
+    const tod = e.target.closest('.tod');
+    if (tod) { x[tod.dataset.k] = readTod(tod); return; }
     if (e.target.dataset.k) x[e.target.dataset.k] = e.target.type === 'number' ? Number(e.target.value) : e.target.value;
     if (e.target.dataset.d !== undefined) {
       const d = Number(e.target.dataset.d);
@@ -191,7 +262,7 @@ function routeForm(el, id) {
   $('#gen', el).onclick = () => {
     const c = calculate({ t1: readTime(f, 't1'), t2: readTime(f, 't2'), r1: Number(f.r1.value), demand: {} });
     if (c.error) { $('#err', el).textContent = c.error; return; }
-    const [h, m] = $('#g-t', el).value.split(':').map(Number);
+    const [h, m] = readTod($('#g-t', el)).split(':').map(Number);
     rows = autoSchedule({ mode: c.mode, perPeriod: c.perPeriod, aircraft: Math.max(1, Number(f.count.value) || 1), rt: c.rt, firstDep: h * 60 + m, startNumber: Number($('#g-num', el).value) || 100 })
       .map((x) => ({ id: store.uid(), ...x }));
     drawRows(); $('#err', el).textContent = '';
@@ -243,6 +314,9 @@ function routeForm(el, id) {
     };
     const i = s.routes.findIndex((x) => x.id === r.id);
     if (i >= 0) s.routes[i] = next; else s.routes.push(next);
+    s.destImages ||= {};
+    const ov = f.destimg.value.trim();
+    if (ov) s.destImages[d] = ov; else delete s.destImages[d];
     store.save();
     sessionStorage.removeItem('airsim.draft');
     toast(configured ? 'Ruta guardada' : 'Ruta guardada: falta la configuración de asientos para venderla');

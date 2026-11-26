@@ -74,3 +74,25 @@ export function barcodeSvg(text, w = 220, h = 46) {
 export const cabinName = (c) => ({ Y: 'Economy', W: 'Premium Economy', B: 'Business', F: 'First' }[c]);
 export const arrDayTag = (off) => (off > 0 ? `<sup class="plus">+${off}</sup>` : '');
 export { DAY };
+
+/** Atributos data-* para que hydrateImages() ponga una foto de paisaje del destino. */
+export function destImageAttrs(code) {
+  const a = airport(code);
+  const ov = store.get()?.destImages?.[code] || '';
+  return `data-img-kind="dest" data-img-title="${esc(a.city)}" data-img-country="${esc(a.cc ? countryName(a.cc) : '')}" data-img-ov="${esc(ov)}"`;
+}
+
+/** Hora del día con selectores de hora y minutos (de 5 en 5). Si el valor trae otro minuto, se conserva como opción extra. */
+export function todSelect(value = '08:00', attrs = '') {
+  const [h, m] = String(value).split(':').map(Number);
+  const hours = Array.from({ length: 24 }, (_, i) => `<option value="${i}" ${i === h ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`).join('');
+  const mins = Array.from({ length: 12 }, (_, i) => i * 5);
+  if (!mins.includes(m)) mins.push(m);
+  mins.sort((a, b) => a - b);
+  const minOpts = mins.map((v) => `<option value="${v}" ${v === m ? 'selected' : ''}>${String(v).padStart(2, '0')}</option>`).join('');
+  return `<span class="tod" ${attrs}><select class="h" aria-label="hora">${hours}</select><b>:</b><select class="m" aria-label="minutos">${minOpts}</select></span>`;
+}
+export function readTod(el) {
+  const [h, m] = el.querySelectorAll('select');
+  return `${String(h.value).padStart(2, '0')}:${String(m.value).padStart(2, '0')}`;
+}

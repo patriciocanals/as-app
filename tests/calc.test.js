@@ -131,3 +131,16 @@ test('normalize: datos de la v1 (flota aparte) se convierten al avión dentro de
   assert.equal(n.airline.currency, '€'); // rellena valores que faltan
   assert.deepEqual(normalize({}).routes, []);
 });
+
+// ---------- selector de hora ----------
+test('todSelect: minutos de 5 en 5, y conserva un minuto suelto de datos importados', async () => {
+  // util.js importa store (localStorage solo se usa en funciones), así que se puede cargar en Node
+  const { todSelect } = await import('../js/util.js');
+  const html = todSelect('08:20', 'data-k="outDep"');
+  assert.equal((html.match(/<option value="\d+" (selected )?>?/g) || []).length > 0, true);
+  const mins = [...html.split('class="m"')[1].matchAll(/<option value="(\d+)"/g)].map((m) => Number(m[1]));
+  assert.deepEqual(mins, [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55], 'sin 1, 2, 3, 4…');
+  assert.match(html, /<option value="20" selected>20<\/option>/);
+  const odd = todSelect('08:07');
+  assert.ok(odd.split('class="m"')[1].includes('<option value="7" selected>07</option>'), 'el 07 importado no se pierde');
+});

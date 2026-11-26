@@ -1,5 +1,6 @@
 import * as store from './store.js';
 import { esc } from './util.js';
+import * as sync from './sync.js';
 
 export const go = (hash) => { location.hash = hash; };
 
@@ -47,4 +48,45 @@ export function toast(msg) {
   t.classList.add('show');
   clearTimeout(toast.t);
   toast.t = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ---------- cuenta, estado de sincronización y avisos ----------
+const STATUS = {
+  saving: ['⟳ Guardando…', ''],
+  saved: ['☁ Guardado', 'ok'],
+  offline: ['⚠ Sin conexión: reintentando', 'warn'],
+};
+
+export function setupChrome() {
+  const el = document.getElementById('account');
+  if (sync.mode === 'cloud' && sync.token()) {
+    el.innerHTML = `<span id="sync" class="sync ok" role="status">☁ Guardado</span>
+      <span class="who" title="Tu cuenta">👤 ${esc(sync.user())}</span><button class="btn btn-link btn-sm" id="logout">Salir</button>`;
+    document.getElementById('logout').onclick = async () => {
+      await sync.settle();
+      await sync.logout();
+      location.replace(`${location.pathname}?bye=1`);
+    };
+    sync.onStatus((st) => {
+      const s = document.getElementById('sync');
+      if (st === 'conflict') {
+        showBanner('Esta aerolínea se modificó desde otro dispositivo, así que tus últimos cambios no se han guardado. Recarga para ver la versión más reciente.', 'Recargar', () => location.reload());
+        return;
+      }
+      if (!s || !STATUS[st]) return;
+      s.textContent = STATUS[st][0];
+      s.className = `sync ${STATUS[st][1]}`;
+    });
+  } else {
+    el.innerHTML = '';
+  }
+  const foot = document.getElementById('footer-mode');
+  if (foot) foot.textContent = sync.mode === 'cloud' ? '' : ' Modo local: los datos solo están en este navegador.';
+}
+
+export function showBanner(text, label, onClick) {
+  const b = document.getElementById('banner');
+  b.hidden = false;
+  b.innerHTML = `<span>${esc(text)}</span> <button class="btn btn-light btn-sm">${esc(label)}</button>`;
+  b.querySelector('button').onclick = onClick;
 }

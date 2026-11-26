@@ -1,10 +1,12 @@
-// Persistencia en localStorage con VARIAS aerolíneas (como en el juego: hasta 6).
+// Persistencia con VARIAS aerolíneas (como en el juego: hasta 6).
+//  - Modo nube (Netlify): los datos viven en tu cuenta y se sincronizan entre dispositivos (js/sync.js).
+//  - Modo local (sin backend): localStorage del navegador.
 //
-//   airsim.v2 = { v: 2, last: "<id>", airlines: { "<id>": { airline, routes, customAirports, bookings } } }
+//   container = { v: 2, last: "<id>", airlines: { "<id>": { airline, routes, customAirports, destImages, bookings } } }
 //
 // La aerolínea activa se decide por pestaña con ?a=<id> en la URL, así puedes tener
-// dos aerolíneas abiertas a la vez en dos pestañas. Cada guardado relee el almacenamiento
-// y solo escribe SU aerolínea, para que las pestañas no se pisen entre sí.
+// dos aerolíneas abiertas a la vez en dos pestañas. Cada guardado solo escribe SU aerolínea.
+import * as sync from './sync.js';
 
 const KEY = 'airsim.v2';
 const OLD_KEY = 'airsim.v1';
@@ -14,19 +16,24 @@ let id = null;
 let state = null;
 let cache = { v: 2, last: null, airlines: {} };
 
-export const uid = () => Math.random().toString(36).slice(2, 10);
+export const uid = () => (Math.random().toString(36) + '00000000').slice(2, 10);
 
-function read() {
+const cloud = () => sync.mode === 'cloud';
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+
+function readLocal() {
   try {
-    const c = JSON.parse(localStorage.getItem(KEY));
+    const c = JSON.parse(lsGet(KEY));
     if (c && c.airlines) return c;
   } catch { /* vacío o corrupto */ }
   return null;
 }
+const read = () => (cloud() ? cache : readLocal());
 function write(c) {
   cache = c;
-  try { localStorage.setItem(KEY, JSON.stringify(c)); } catch { /* cuota o bloqueado */ }
+  if (!cloud()) { try { localStorage.setItem(KEY, JSON.stringify(c)); } catch { /* cuota o bloqueado */ } }
 }
+const pushAirline = (aid, delay) => sync.schedule(aid, () => (aid === id ? state : cache.airlines[aid]), delay);
 
 /** Normaliza datos de cualquier versión (incluida la 1, que guardaba aviones aparte). */
 export function normalize(d = {}) {
@@ -46,22 +53,23 @@ export function normalize(d = {}) {
     airline: { name: 'Mi aerolínea', code: 'XX', color: '#0a3d91', currency: '€', tagline: '', ...(d.airline || {}) },
     routes,
     customAirports: d.customAirports || {},
+    destImages: d.destImages || {},
     bookings: d.bookings || [],
   };
 }
 
 const isV1Demo = (old) => (old.routes || []).length > 0 && old.routes.every((r) => String(r.id).startsWith('r-mad-'));
 
-export async function init() {
-  let c = read();
+async function initLocal() {
+  let c = readLocal();
   if (!c) {
     c = { v: 2, last: null, airlines: {} };
     try { // migrar la versión 1 (salvo que fueran solo los datos de ejemplo que traía)
-      const old = JSON.parse(localStorage.getItem(OLD_KEY));
+      const old = JSON.parse(lsGet(OLD_KEY));
       if (old && !isV1Demo(old)) { const n = uid(); c.airlines[n] = normalize(old); c.last = n; }
     } catch { /* sin datos antiguos */ }
     if (!Object.keys(c.airlines).length) {
-      try { // data/seed.json publicado con la web (exportación de una aerolínea o de todas)
+      try { // data/seed.json publicado con la web (solo modo local)
         const r = await fetch('data/seed.json', { cache: 'no-store' });
         if (r.ok) {
           const j = await r.json();
@@ -72,11 +80,39 @@ export async function init() {
     }
     write(c);
   }
+  return c;
+}
+
+async function initCloud() {
+  const remote = await sync.loadAll();
+  sync.setRevs(remote);
+  const c = { v: 2, last: lsGet(`airsim.last.${sync.user()}`), airlines: {} };
+  for (const [k, rec] of Object.entries(remote)) c.airlines[k] = normalize(rec.data);
+  cache = c;
+
+  // primera vez en la nube con datos guardados en este navegador: ofrecer subirlos
+  const flag = `airsim.migrated.${sync.user()}`;
+  const local = readLocal();
+  if (!Object.keys(c.airlines).length && local && Object.keys(local.airlines).length && !lsGet(flag)) {
+    const n = Object.keys(local.airlines).length;
+    try { localStorage.setItem(flag, '1'); } catch { /* ignorar */ }
+    if (confirm(`Hay ${n} aerolínea(s) guardada(s) solo en este navegador. ¿Subirlas a tu cuenta para verlas en todos tus dispositivos?`)) {
+      for (const [k, v] of Object.entries(local.airlines)) { c.airlines[k] = normalize(v); }
+      c.last = local.last;
+      Object.keys(c.airlines).forEach((k) => pushAirline(k, 0));
+    }
+  }
+  return c;
+}
+
+export async function init() {
+  const c = cloud() ? await initCloud() : await initLocal();
   cache = c;
   const wanted = new URLSearchParams(location.search).get('a');
   id = c.airlines[wanted] ? wanted : c.airlines[c.last] ? c.last : Object.keys(c.airlines)[0] || null;
   state = id ? c.airlines[id] : null;
   if (id) {
+    try { localStorage.setItem(`airsim.last.${sync.user() || ''}`, id); } catch { /* ignorar */ }
     // fija ?a=<id> en esta pestaña para que recargar no cambie de aerolínea
     const url = new URL(location.href);
     url.searchParams.set('a', id);
@@ -99,9 +135,10 @@ export function save() {
   c.airlines[id] = state;
   c.last = id;
   write(c);
+  pushAirline(id);
 }
 
-/** Crea una aerolínea vacía y devuelve su id (no cambia la activa). */
+/** Crea una aerolínea vacía y devuelve su id (no cambia la activa). Se sube a la nube al momento. */
 export function createAirline(fields) {
   const c = read() || cache;
   if (Object.keys(c.airlines).length >= MAX_AIRLINES) throw new Error(`Máximo ${MAX_AIRLINES} aerolíneas.`);
@@ -109,14 +146,16 @@ export function createAirline(fields) {
   c.airlines[n] = normalize({ airline: fields });
   c.last = n;
   write(c);
+  pushAirline(n, 0);
   return n;
 }
 
-export function deleteAirline(target) {
+export async function deleteAirline(target) {
   const c = read() || cache;
   delete c.airlines[target];
   if (c.last === target) c.last = Object.keys(c.airlines)[0] || null;
   write(c);
+  await sync.remove(target);
   return Object.keys(c.airlines);
 }
 
@@ -132,7 +171,9 @@ export function importAll(obj) {
   let added = 0;
   for (const a of Object.values(obj.airlines || {})) {
     if (Object.keys(c.airlines).length >= MAX_AIRLINES) break;
-    c.airlines[uid()] = normalize(a);
+    const n = uid();
+    c.airlines[n] = normalize(a);
+    pushAirline(n, 0);
     added++;
   }
   write(c);

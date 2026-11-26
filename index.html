@@ -14,6 +14,7 @@
     <div class="bar">
       <a href="#/" id="brand" class="brand" aria-label="Inicio"></a>
       <details id="switcher" class="switcher" hidden></details>
+      <div id="account" class="account"></div>
       <button id="burger" class="burger" aria-label="Menú" aria-controls="menu">☰</button>
       <nav id="menu" class="menu">
         <a href="#/" data-nav="home">Reservar</a>
@@ -24,10 +25,11 @@
     </div>
   </header>
 
+  <div id="banner" class="banner no-print" role="alert" hidden></div>
   <main id="app" tabindex="-1"></main>
 
   <footer class="site-footer no-print">
-    <p><span id="footer-name"></span> · Proyecto de simulación para jugar en paralelo a Airline Simulator. Los datos se guardan en tu navegador.</p>
+    <p><span id="footer-name"></span> · Proyecto de simulación para jugar en paralelo a Airline Simulator.<span id="footer-mode"></span></p>
   </footer>
   <div id="toast" class="toast" role="status"></div>
 

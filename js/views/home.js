@@ -1,63 +1,78 @@
 import * as store from '../store.js';
-import { $, $$, esc, airport, airportOptions, networkAirports, flagImg, money, cityOf } from '../util.js';
+import { $, $$, esc, airport, airportOptions, networkAirports, flagImg, money, destImageAttrs } from '../util.js';
 import { todayISO, addDays, nextDateWithFlights, isConfigured } from '../schedule.js';
 import { go } from '../nav.js';
 import { setFlow } from '../flow.js';
+import { countryName } from '../airports.js';
 
 let timer;
 
-function destinations(state) {
-  // Destinos reales de la compañía: cada extremo de ruta, con el precio "desde" más bajo
+const sellable = (state) => state.routes.filter((x) => isConfigured(x.aircraft?.config));
+
+function hubOf(routes) {
+  const n = {};
+  routes.forEach((r) => { n[r.origin] = (n[r.origin] || 0) + 1; n[r.dest] = (n[r.dest] || 0) + 1; });
+  return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+function destinations(routes) {
+  // Destinos reales de la compañía, con el precio "desde" más bajo (el del hub no se destaca)
   const map = new Map();
-  for (const r of state.routes.filter((x) => isConfigured(x.aircraft?.config))) {
+  for (const r of routes) {
+    const prices = Object.values(r.prices).filter((p) => p > 0);
+    if (!prices.length) continue;
+    const price = Math.min(...prices);
     for (const [from, to] of [[r.origin, r.dest], [r.dest, r.origin]]) {
-      const price = Math.min(...Object.values(r.prices).filter((p) => p > 0));
       const cur = map.get(to);
       if (!cur || price < cur.price) map.set(to, { from, to, price });
     }
   }
-  // Prioriza destinos que no son el hub principal
-  const hubCount = {};
-  state.routes.filter((x) => isConfigured(x.aircraft?.config)).forEach((r) => { hubCount[r.origin] = (hubCount[r.origin] || 0) + 1; hubCount[r.dest] = (hubCount[r.dest] || 0) + 1; });
-  const hub = Object.entries(hubCount).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const hub = hubOf(routes);
   return [...map.values()].filter((d) => d.to !== hub);
 }
 
 export function render(root) {
   const state = store.get();
+  const routes = sellable(state);
   const codes = networkAirports();
-  // hub = aeropuerto con más rutas; es el origen por defecto
-  const count = (c) => state.routes.filter((r) => r.origin === c || r.dest === c).length;
-  const hub = [...codes].sort((a, b) => count(b) - count(a))[0];
-  const firstDest = codes.find((c) => c !== hub) || hub;
   const today = todayISO();
-  const dests = destinations(state);
-  const fleetMap = new Map();
-  state.routes.filter((x) => isConfigured(x.aircraft?.config)).forEach((r) => fleetMap.set(r.aircraft.model + r.aircraft.name, r.aircraft));
-  const fleet = [...fleetMap.values()];
-  const pending = state.routes.length - state.routes.filter((x) => isConfigured(x.aircraft?.config)).length;
 
   if (!codes.length) {
+    const pending = state.routes.length;
     root.innerHTML = `<section class="section narrow"><div class="card empty">
       <h1>${esc(state.airline.name)}</h1>
-      <p class="muted">${state.routes.length ? `Tienes ${pending} ruta(s) pendientes de configurar los asientos del avión. Cuando indiques la configuración, aparecerán aquí para reservar.` : 'Esta aerolínea aún no tiene rutas.'}</p>
+      <p class="muted">${pending ? `Tienes ${pending} ruta(s) pendientes de configurar los asientos del avión. Cuando indiques la configuración, aparecerán aquí para reservar.` : 'Esta aerolínea aún no tiene rutas.'}</p>
       <div class="actions" style="justify-content:center"><a class="btn btn-primary" href="#/calculator">Calcular una ruta</a><a class="btn btn-outline" href="#/admin/routes">Administrar rutas</a></div>
     </div></section>`;
     return;
   }
 
+  const hub = hubOf(routes);
+  const firstDest = codes.find((c) => c !== hub) || hub;
+  const dests = destinations(routes).sort((a, b) => a.price - b.price || a.to.localeCompare(b.to));
+  const SHOWN = 8;
+  const slidesList = dests.slice(0, 6);
+  const fleetMap = new Map();
+  routes.forEach((r) => {
+    const k = r.aircraft.model + r.aircraft.name;
+    const cur = fleetMap.get(k) || { ...r.aircraft, routes: 0 };
+    cur.routes++;
+    fleetMap.set(k, cur);
+  });
+  const fleet = [...fleetMap.values()];
+
   root.innerHTML = `
   <section class="hero">
     <div class="hero-slides" id="slides">
-      ${dests.map((d, i) => `
-        <div class="slide ${i === 0 ? 'active' : ''}" data-img-kind="dest" data-img-title="${esc(cityOf(d.to))}" data-from="${d.from}" data-to="${d.to}">
+      ${slidesList.map((d, i) => `
+        <div class="slide ${i === 0 ? 'active' : ''}" ${destImageAttrs(d.to)}>
           <div class="slide-text">
-            <span class="eyebrow">${flagImg(airport(d.to).cc)} ${esc(airport(d.to).city)}</span>
+            <span class="eyebrow">${flagImg(airport(d.to).cc)} ${esc(countryName(airport(d.to).cc) || '')}</span>
             <h2>Vuela a ${esc(airport(d.to).city)} desde ${money(d.price)}</h2>
             <button class="btn btn-light" data-deal="${d.from}-${d.to}">Ver vuelos</button>
           </div>
-        </div>`).join('') || `<div class="slide active no-img"><div class="slide-text"><h2>${esc(state.airline.tagline)}</h2></div></div>`}
-      <div class="dots" id="dots">${dests.map((_, i) => `<button aria-label="Banner ${i + 1}" class="${i === 0 ? 'on' : ''}" data-dot="${i}"></button>`).join('')}</div>
+        </div>`).join('') || `<div class="slide active no-img"><div class="slide-text"><h2>${esc(state.airline.tagline || state.airline.name)}</h2></div></div>`}
+      <div class="dots" id="dots">${slidesList.map((_, i) => `<button aria-label="Banner ${i + 1}" class="${i === 0 ? 'on' : ''}" data-dot="${i}"></button>`).join('')}</div>
     </div>
 
     <form class="search card" id="search">
@@ -78,32 +93,35 @@ export function render(root) {
     </form>
   </section>
 
-  <section class="section">
-    <h2>Destinos destacados</h2>
-    <div class="cards">
-      ${dests.map((d) => `
-        <article class="dest-card">
-          <div class="dest-img" data-img-kind="dest" data-img-title="${esc(cityOf(d.to))}"><span class="code">${d.to}</span></div>
-          <div class="dest-body">
-            <h3>${flagImg(airport(d.to).cc)} ${esc(airport(d.to).city)}</h3>
-            <p class="muted">${esc(airport(d.to).name)}</p>
-            <p class="price">desde <strong>${money(d.price)}</strong></p>
-            <button class="btn btn-outline" data-deal="${d.from}-${d.to}">Reservar</button>
+  ${dests.length ? `<section class="section">
+    <div class="sec-head"><h2>Destinos que te esperan</h2><p class="muted">Las mejores ofertas de nuestra red</p></div>
+    <div class="dest-grid">
+      ${dests.map((d, i) => `
+        <article class="dest" ${i >= SHOWN ? 'hidden data-extra' : ''} tabindex="0" role="link" aria-label="Vuelos a ${esc(airport(d.to).city)}" data-deal="${d.from}-${d.to}">
+          <div class="dest-photo" ${destImageAttrs(d.to)}></div>
+          <span class="dest-price">desde <strong>${money(d.price)}</strong></span>
+          <div class="dest-info">
+            <h3>${esc(airport(d.to).city)}</h3>
+            <p>${flagImg(airport(d.to).cc, 'flag sm')} ${esc(countryName(airport(d.to).cc) || '')} · desde ${esc(airport(d.from).city)}</p>
+            <span class="dest-cta">Ver vuelos →</span>
           </div>
-        </article>`).join('') || '<p class="muted">Aún no hay rutas. Créalas en Administración.</p>'}
+        </article>`).join('')}
     </div>
-  </section>
+    ${dests.length > SHOWN ? `<div class="more-wrap"><button class="btn btn-outline" id="more">Ver los ${dests.length} destinos</button></div>` : ''}
+  </section>` : ''}
 
   ${fleet.length ? `<section class="section">
-    <h2>Nuestra flota</h2>
-    <div class="cards">
+    <div class="sec-head"><h2>Nuestra flota</h2><p class="muted">Los aviones con los que volamos</p></div>
+    <div class="fleet-grid">
       ${fleet.map((a) => `
-        <article class="dest-card">
-          <div class="dest-img" data-img-kind="aircraft" data-img-title="${esc(a.wiki || a.name)}"><span class="code">${esc(a.name)}</span></div>
-          <div class="dest-body"><h3>${esc(a.name)}</h3>
-          <p class="muted">${a.config.filter((c) => c.count).map((c) => `${c.cls}${c.count}`).join(' · ')}</p></div>
+        <article class="plane">
+          <div class="plane-photo" data-img-kind="aircraft" data-img-title="${esc(a.wiki || a.name)}" role="img" aria-label="${esc(a.name)}"></div>
+          <div class="plane-info"><h3>${esc(a.name)}</h3>
+            <p class="muted">${a.config.filter((c) => c.count).map((c) => `${c.cls} ${c.count}`).join(' · ')}</p>
+            <p class="muted small">${a.routes} ruta${a.routes > 1 ? 's' : ''}</p></div>
         </article>`).join('')}
-    </div></section>` : ''}`;
+    </div>
+  </section>` : ''}`;
 
   const form = $('#search', root);
   const syncTrip = () => { $('#ret-wrap', root).style.display = form.trip.value === 'rt' ? '' : 'none'; };
@@ -120,13 +138,19 @@ export function render(root) {
     go('/results');
   });
 
-  $$('[data-deal]', root).forEach((b) => b.addEventListener('click', () => {
-    const [o, d] = b.dataset.deal.split('-');
+  $('#more', root)?.addEventListener('click', (e) => { $$('[data-extra]', root).forEach((c) => { c.hidden = false; }); e.target.remove(); });
+
+  const deal = (el) => {
+    const [o, d] = el.dataset.deal.split('-');
     const dep = nextDateWithFlights(state, o, d, addDays(today, 1)) || addDays(today, 1);
     const back = nextDateWithFlights(state, d, o, addDays(dep, 1));
     setFlow({ o, d, dep, ret: back || '', pax: 1, trip: back ? 'rt' : 'ow' });
     go('/results');
-  }));
+  };
+  $$('[data-deal]', root).forEach((el) => {
+    el.addEventListener('click', () => deal(el));
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); deal(el); } });
+  });
 
   // carrusel
   const slides = $$('.slide', root);

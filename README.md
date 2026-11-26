@@ -1,58 +1,45 @@
 # Airline Simulator · WebApp
 
-Web app para jugar **en paralelo** a *Airline Simulator*:
+Web app para jugar **en paralelo** a *Airline Simulator*.
 
-- **Calculadora de rutas** — con T1, T2, R1 (R2 fijo = 5 min) y las demandas Y/W/B/F calcula el RT, cuántas rotaciones caben (por día, o por semana si el RT supera 24 h) y cuántos asientos de cada clase necesitas con 1–6 aviones.
-- **Sistema de reservas** estilo aerolínea: buscador ida / ida y vuelta, resultados por día, selección de cabina y asiento (mapa de asientos), reserva con código PNR.
-- **Ticket imprimible** (tarjeta de embarque con IATA grande, ciudad, nº de vuelo, horarios, clase y asiento) → *Imprimir / guardar PDF*.
-- **Banners dinámicos** con los destinos reales de tu aerolínea, banderas y fotos automáticas (sin claves de API).
-- **Administración**: datos de la aerolínea, rutas y programación semanal; importar/exportar JSON.
-- **Varias aerolíneas** (hasta 6, como en el juego): cada una con su nombre, código de vuelo, color, rutas y reservas. Se cambia desde el menú de cabecera y se pueden abrir **a la vez en pestañas distintas** (la aerolínea activa va en la URL: `?a=<id>`).
-- **Catálogo de aviones** del juego (Airbus, Bombardier/Mitsubishi, Embraer, ATR, De Havilland, COMAC, Sukhoi). No hay ninguna configuración por defecto: la **configuración de asientos** (cuántos de F/B/W/Y y su distribución por fila) se introduce *después* de la calculadora, cuando ya la tienes montada en el juego. Una ruta sin configuración queda *pendiente* y no se vende.
-
-Sin backend ni build: HTML + CSS + JavaScript (módulos ES). Los datos viven en `localStorage`.
+- **Cuenta en la nube**: inicias sesión y tus aerolíneas, rutas y reservas están en cualquier dispositivo (datos en Netlify Blobs, sin servicios externos).
+- **Calculadora de rutas**: con T1, T2, R1 (R2 fijo = 5 min) y las demandas Y/W/B/F calcula el RT, las rotaciones (por día, o por semana si el RT supera 24 h) y los asientos de cada clase para 1–6 aviones.
+- **Varias aerolíneas** (hasta 6): nombre, código de vuelo, color, rutas y reservas propios. Se abren a la vez en pestañas distintas (`?a=<id>`).
+- **Catálogo de aviones** del juego. La configuración de asientos se aporta *después* de la calculadora; una ruta sin ella queda *pendiente* y no se vende.
+- **Reservas** estilo aerolínea (ida / ida y vuelta, mapa de asientos, código PNR) y **ticket imprimible**.
+- **Administración**: lista de rutas compacta con búsqueda, filtros, orden y paginación; programación semanal con horas de 5 en 5 min.
+- **Imágenes automáticas** sin claves de API: fotos de paisaje de los destinos (Wikimedia Commons), aviones y banderas.
 
 ## Probar en local
 
 ```bash
-npm start          # sirve la carpeta (necesita Node); o: python3 -m http.server 8080
-npm test           # tests del motor de cálculo (Node ≥ 18, sin dependencias)
+npm test        # tests del motor, la API y las imágenes (Node ≥ 18, sin dependencias)
+npm run dev     # http://localhost:8080 — web + la misma API que Netlify, datos en .data/store.json
 ```
 
-> Hay que abrirlo desde un servidor (no con doble clic en `index.html`) porque usa módulos ES.
+Si abres la web con un servidor estático sin `/api` (p. ej. `python3 -m http.server`), funciona en **modo local**: sin cuenta, datos solo en ese navegador.
 
 ## Subir a GitHub
 
 ```bash
-cd airline-simulator
-git init -b main
-git add .
-git commit -m "Airline Simulator WebApp"
+git init -b main && git add . && git commit -m "Airline Simulator WebApp"
 git remote add origin https://github.com/TU_USUARIO/airline-simulator.git
 git push -u origin main
 ```
 
 ## Desplegar en Netlify
 
-1. <https://app.netlify.com> → **Add new site → Import an existing project → GitHub** y elige el repositorio.
-2. Ajustes de build: se leen de `netlify.toml` (publish directory `.`, sin comando de build). Pulsa **Deploy**.
-3. Cada `git push` a `main` redespliega solo.
+1. <https://app.netlify.com> → **Add new site → Import an existing project → GitHub** → elige el repositorio. Los ajustes se leen de `netlify.toml`; pulsa **Deploy**. Netlify instala `@netlify/blobs` y publica la función `/api/*` automáticamente.
+2. **Importante:** en *Site configuration → Environment variables* crea `INVITE_CODE` con un código que solo tú sepas. Sin él **cualquiera** que abra tu web podría crearse una cuenta. Con él, para registrarse hace falta ese código. Tras añadirlo, **redespliega** (Deploys → Trigger deploy).
+3. Abre tu web → **Soy nuevo** → crea tu usuario (y el código de invitación). Desde ese momento entras con tu usuario y contraseña en cualquier dispositivo.
 
-## Datos y publicación
+Si ya usabas la versión local: al iniciar sesión por primera vez, la web detecta los datos guardados en ese navegador y te ofrece subirlos a tu cuenta.
 
-Cada visitante guarda sus datos en **su navegador**. La primera vez que se abre la web (sin datos) se pide crear la primera aerolínea. Para que tu web publicada arranque con *tus* aerolíneas y rutas:
+## Cómo funciona la sincronización
 
-1. En la web: **Administración → Datos → Exportar esta aerolínea** (o **Exportar todas**).
-2. Guarda el archivo como `data/seed.json` en el repositorio y haz push.
-3. Quien abra la web por primera vez (sin datos guardados) cargará ese archivo.
-
-## Flujo de uso recomendado
-
-1. Evalúas una ruta nueva en **Calculadora** mientras juegas.
-2. Cuando la decides, pulsa **Crear ruta** → eliges el modelo de avión y se abre el formulario con la programación generada.
-3. En el juego montas la configuración del avión; vuelves a **Administración → Rutas → Configurar asientos** y la introduces.
-4. Ajusta números de vuelo, horas y días con los reales del juego.
-5. Pruebas la reserva: origen, destino, fecha → vuelos disponibles → asiento → ticket.
+- Cada cambio se guarda en la nube a los ~0,7 s (arriba verás «☁ Guardado»). Si pierdes conexión, reintenta solo.
+- Cada aerolínea tiene un número de revisión. Si cambias la misma aerolínea desde dos dispositivos a la vez, el segundo en guardar ve un aviso y debe recargar (no se pisan datos en silencio).
+- Las contraseñas se guardan con `scrypt` (nunca en claro), la sesión dura 90 días y hay bloqueo de 1 minuto tras 5 intentos fallidos.
 
 ## Cómo se calcula
 
@@ -64,24 +51,22 @@ RT > 24 h : rotaciones/semana = floor(168h / RT)
             asientos/vuelo = ceil( demanda / rotaciones/semana / N )
 ```
 
-Los dos ejemplos del documento original están como tests en `tests/calc.test.js`.
+Los dos ejemplos del documento original están como tests (`tests/calc.test.js`).
 
 ## Imágenes
 
-- Banderas: [flagcdn.com](https://flagcdn.com).
-- Destinos y aviones: imagen principal del artículo de Wikipedia (API REST, sin clave). Si no existe, se genera una imagen con IA vía Pollinations (sin clave); si falla, un degradado de la marca.
-- Para un modelo de avión concreto puedes fijar el artículo de Wikipedia en **Flota**.
+Para cada destino se busca en Wikimedia Commons una foto **apaisada** de la ciudad (se descartan banderas, escudos, mapas y logos) y se comprueba que carga antes de usarla. Si no hay, se usa la imagen principal de Wikipedia y, como último recurso, una imagen generada con IA (Pollinations). Puedes fijar otra en **Administración → Ruta → Imagen del destino** (un texto de búsqueda como «Sagrada Familia» o una URL).
 
 ## Estructura
 
 ```
-index.html  netlify.toml  package.json
+index.html  netlify.toml  package.json  dev-server.mjs
+netlify/functions/api.mjs   función de Netlify (Blobs)
+netlify/lib/core.mjs        API de cuentas y datos (pura, testeada)
 css/styles.css
-js/calc.js       motor de cálculo (puro, testeado)
-js/schedule.js   horarios, búsqueda de vuelos, mapa de asientos
-js/aircraft.js   catálogo de modelos de avión
-js/store.js      persistencia multi-aerolínea (localStorage + data/seed.json)
-js/images.js     banderas e imágenes automáticas
-js/views/        home, results, book, ticket, manage, calculator, admin, welcome
-tests/           node --test
+js/calc.js        motor de cálculo      js/schedule.js  horarios, búsqueda, asientos
+js/aircraft.js    catálogo de aviones   js/images.js    imágenes automáticas
+js/store.js       aerolíneas (nube/local)   js/sync.js  sincronización con la API
+js/views/         home, results, book, ticket, manage, calculator, admin, welcome, auth
+tests/            node --test
 ```

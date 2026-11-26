@@ -1,6 +1,7 @@
 import * as store from '../store.js';
 import { $ } from '../util.js';
 import { switchUrl } from '../nav.js';
+import * as sync from '../sync.js';
 
 export function render(root, { q }) {
   const first = !store.get();
@@ -28,7 +29,7 @@ export function render(root, { q }) {
   </section>`;
   const f = $('#f', root);
   if (!f) return;
-  f.addEventListener('submit', (e) => {
+  f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const code = f.code.value.trim().toUpperCase();
     if (!/^[A-Z0-9]{2,3}$/.test(code)) { $('#err', root).textContent = 'El código debe tener 2 o 3 letras/números.'; return; }
@@ -38,6 +39,7 @@ export function render(root, { q }) {
     } catch (err) { $('#err', root).textContent = err.message; return; }
     // si venías de la calculadora con una ruta a medias, se continúa con ella
     const next = sessionStorage.getItem('airsim.draft') ? '#/admin/route/new' : '#/calculator';
+    await sync.settle(); // asegura que la aerolínea ya está en la nube antes de recargar
     location.href = switchUrl(nid, next);
   });
 }

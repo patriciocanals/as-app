@@ -1,7 +1,14 @@
-# Sitio estático: sin build. Netlify publica la raíz del repositorio.
+# Sitio estático + una función (API de cuentas y datos en Netlify Blobs).
 [build]
   publish = "."
   command = "echo 'sitio estático, sin build'"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
 
 [[headers]]
   for = "/*"
