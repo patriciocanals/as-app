@@ -270,20 +270,48 @@ function routeForm(el, id) {
 
   f.model.addEventListener('change', () => { $('#custom-wrap', el).hidden = f.model.value !== 'custom'; });
 
-  // aeropuertos desconocidos: pedir ciudad y país
+  // aeropuertos desconocidos: pedir ciudad, país y nombre. Lo ya escrito se conserva si cambia el otro código.
+  const missingCodes = () => [f.o.value, f.d.value].map((v) => v.trim().toUpperCase())
+    .filter((c, i, a) => c.length === 3 && !allAirports()[c] && a.indexOf(c) === i);
+  const aptField = (fs, name) => fs.querySelector(`[name="${name}"]`);
+  const aptHtml = (c) => `<fieldset class="row newapt" data-code="${c}"><legend>Aeropuerto nuevo ${c}: indica sus datos</legend>
+      <label>Ciudad<input name="city" autocomplete="off"></label>
+      <label>País (código de 2 letras, p. ej. ES)<input name="cc" maxlength="2" style="text-transform:uppercase" autocomplete="off"></label>
+      <label>Nombre del aeropuerto<input name="name" autocomplete="off"></label></fieldset>`;
+  // Solo añade o quita los aeropuertos que cambian: los que ya están (y lo escrito en ellos) no se tocan,
+  // así no se pierde el foco ni el texto cuando el usuario pasa de un campo a otro.
   const checkApts = () => {
-    const missing = [f.o.value, f.d.value].map((v) => v.trim().toUpperCase()).filter((c, i, a) => c.length === 3 && !allAirports()[c] && a.indexOf(c) === i);
-    $('#newapts', el).innerHTML = missing.map((c) => `<fieldset class="row newapt" data-code="${c}"><legend>Aeropuerto nuevo ${c}</legend>
-      <label>Ciudad<input name="city" required></label><label>País (ISO-2, ej. ES)<input name="cc" maxlength="2" required style="text-transform:uppercase"></label>
-      <label>Nombre del aeropuerto<input name="name"></label></fieldset>`).join('');
+    const box = $('#newapts', el);
+    const want = missingCodes();
+    $$('.newapt', box).forEach((fs) => { if (!want.includes(fs.dataset.code)) fs.remove(); });
+    want.forEach((c) => { if (!box.querySelector(`.newapt[data-code="${c}"]`)) box.insertAdjacentHTML('beforeend', aptHtml(c)); });
   };
-  f.o.addEventListener('change', checkApts); f.d.addEventListener('change', checkApts); checkApts();
+  for (const input of [f.o, f.d]) for (const ev of ['input', 'change']) input.addEventListener(ev, checkApts);
+  checkApts();
 
   f.addEventListener('submit', (e) => {
     e.preventDefault();
     const err = $('#err', el);
+    try { saveRoute(err); } catch (ex) { console.error(ex); err.textContent = `No se pudo guardar: ${ex.message}`; }
+  });
+
+  function saveRoute(err) {
+    err.textContent = '';
     const o = f.o.value.trim().toUpperCase(); const d = f.d.value.trim().toUpperCase();
     if (o.length !== 3 || d.length !== 3 || o === d) { err.textContent = 'Indica dos códigos IATA distintos de 3 letras.'; return; }
+    // aeropuertos que no están en la base: hacen falta ciudad y país
+    checkApts();
+    const newApts = {};
+    for (const fs of $$('.newapt', el)) {
+      const city = aptField(fs, 'city').value.trim();
+      const cc = aptField(fs, 'cc').value.trim().toUpperCase();
+      if (!city || !/^[A-Z]{2}$/.test(cc)) {
+        err.textContent = `Completa los datos del aeropuerto ${fs.dataset.code}: ciudad y país (2 letras, p. ej. ES).`;
+        (city ? aptField(fs, 'cc') : aptField(fs, 'city')).focus();
+        return;
+      }
+      newApts[fs.dataset.code] = { iata: fs.dataset.code, city, cc, name: aptField(fs, 'name').value.trim() };
+    }
     if (!f.model.value) { err.textContent = 'Elige el modelo de avión.'; return; }
     if (f.model.value === 'custom' && !f.customName.value.trim()) { err.textContent = 'Escribe el nombre del modelo.'; return; }
     if (!rows.length || rows.some((x) => !x.days.length || !x.outDep)) { err.textContent = 'Cada rotación necesita hora de salida y al menos un día.'; return; }
@@ -304,9 +332,8 @@ function routeForm(el, id) {
       ? { model: 'custom', name: f.customName.value.trim(), wiki: f.customName.value.trim(), config: configured ? config : null }
       : { model: cat.id, name: cat.name, wiki: cat.wiki, config: configured ? config : null };
 
-    $$('.newapt', el).forEach((fs) => {
-      s.customAirports[fs.dataset.code] = { iata: fs.dataset.code, city: fs.city.value.trim(), cc: fs.cc.value.trim().toUpperCase(), name: fs.name.value.trim() };
-    });
+    s.customAirports ||= {};
+    Object.assign(s.customAirports, newApts);
     const next = {
       id: r.id, origin: o, dest: d, aircraft, aircraftCount: Math.max(1, Number(f.count.value) || 1), t1, t2, r1: Number(f.r1.value),
       prices: Object.fromEntries(CLS.map((c) => [c, Math.max(0, Number(f[`p-${c}`].value) || 0)])),
@@ -321,7 +348,7 @@ function routeForm(el, id) {
     sessionStorage.removeItem('airsim.draft');
     toast(configured ? 'Ruta guardada' : 'Ruta guardada: falta la configuración de asientos para venderla');
     go('/admin/routes');
-  });
+  }
 }
 
 // ---------- Datos ----------
