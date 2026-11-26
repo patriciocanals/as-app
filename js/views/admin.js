@@ -352,4 +352,3 @@ function data(el) {
   });
   $('#nobk', el).onclick = () => { if (confirm('¿Borrar todas las reservas?')) { s.bookings = []; store.save(); data(el); } };
 }
-//test
