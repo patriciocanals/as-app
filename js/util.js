@@ -2,7 +2,7 @@ import * as store from './store.js';
 import { AIRPORTS, countryName } from './airports.js';
 import { flagUrl } from './images.js';
 import { clock, DAY } from './calc.js';
-import { fromISO } from './schedule.js';
+import { fromISO, isConfigured } from './schedule.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -36,7 +36,7 @@ export const timeStr = (min) => clock(min);
 /** Opciones <option> de aeropuertos de la red (los que aparecen en alguna ruta). */
 export function networkAirports() {
   const set = new Set();
-  store.get().routes.forEach((r) => { set.add(r.origin); set.add(r.dest); });
+  store.get().routes.filter((r) => isConfigured(r.aircraft?.config)).forEach((r) => { set.add(r.origin); set.add(r.dest); });
   return [...set].sort();
 }
 export const airportOptions = (codes, selected) =>

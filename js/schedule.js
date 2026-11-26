@@ -13,6 +13,9 @@ export const todayISO = () => {
 };
 export const DAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
+/** ¿Tiene el avión de la ruta la configuración de asientos ya definida? */
+export const isConfigured = (config) => Array.isArray(config) && config.some((c) => c.count > 0);
+
 /** Hora de regreso y desplazamiento de día respecto a la salida de ida. */
 export function returnTiming(route, rot) {
   const outDep = parseHM(rot.outDep);
@@ -27,15 +30,15 @@ export function flightsOn(state, origin, dest, iso) {
   const out = [];
   const wd = weekday(iso);
   for (const route of state.routes) {
-    const aircraft = state.aircraft.find((a) => a.id === route.aircraftId);
-    if (!aircraft) continue;
+    const aircraft = route.aircraft;
+    if (!aircraft || !isConfigured(aircraft.config)) continue; // pendiente de configurar: no se vende
     for (const rot of route.rotations) {
       const make = (number, depMin, duration, o, d) => {
         const arr = depMin + duration;
         return {
           key: `${state.airline.code}${number}|${iso}`, number: `${state.airline.code}${number}`, origin: o, dest: d, date: iso,
           depMin, arrMin: arr % DAY, arrDayOffset: Math.floor(arr / DAY), duration,
-          routeId: route.id, rotationId: rot.id, aircraftId: aircraft.id, aircraftName: aircraft.name,
+          routeId: route.id, rotationId: rot.id, aircraftId: aircraft.model, aircraftName: aircraft.name,
           prices: route.prices, config: aircraft.config,
         };
       };

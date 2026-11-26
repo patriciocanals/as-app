@@ -8,8 +8,9 @@ import * as manage from './views/manage.js';
 import * as ticket from './views/ticket.js';
 import * as calculator from './views/calculator.js';
 import * as admin from './views/admin.js';
+import * as welcome from './views/welcome.js';
 
-const views = { home, results, book, manage, ticket, calculator, admin };
+const views = { home, results, book, manage, ticket, calculator, admin, welcome };
 const app = document.getElementById('app');
 
 function parse() {
@@ -19,7 +20,9 @@ function parse() {
 
 function render() {
   const ctx = parse();
-  const name = ctx.parts[0] || 'home';
+  let name = ctx.parts[0] || 'home';
+  // sin aerolínea solo funcionan la calculadora y el alta de la primera aerolínea
+  if (!store.get() && name !== 'calculator') name = 'welcome';
   const view = views[name] || home;
   // contenedor nuevo en cada navegación: así no se acumulan listeners
   const root = document.createElement('div');

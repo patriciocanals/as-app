@@ -1,6 +1,6 @@
 import * as store from '../store.js';
 import { $, $$, esc, airport, airportOptions, networkAirports, flagImg, money, cityOf } from '../util.js';
-import { todayISO, addDays, nextDateWithFlights } from '../schedule.js';
+import { todayISO, addDays, nextDateWithFlights, isConfigured } from '../schedule.js';
 import { go } from '../nav.js';
 import { setFlow } from '../flow.js';
 
@@ -9,7 +9,7 @@ let timer;
 function destinations(state) {
   // Destinos reales de la compañía: cada extremo de ruta, con el precio "desde" más bajo
   const map = new Map();
-  for (const r of state.routes) {
+  for (const r of state.routes.filter((x) => isConfigured(x.aircraft?.config))) {
     for (const [from, to] of [[r.origin, r.dest], [r.dest, r.origin]]) {
       const price = Math.min(...Object.values(r.prices).filter((p) => p > 0));
       const cur = map.get(to);
@@ -18,7 +18,7 @@ function destinations(state) {
   }
   // Prioriza destinos que no son el hub principal
   const hubCount = {};
-  state.routes.forEach((r) => { hubCount[r.origin] = (hubCount[r.origin] || 0) + 1; hubCount[r.dest] = (hubCount[r.dest] || 0) + 1; });
+  state.routes.filter((x) => isConfigured(x.aircraft?.config)).forEach((r) => { hubCount[r.origin] = (hubCount[r.origin] || 0) + 1; hubCount[r.dest] = (hubCount[r.dest] || 0) + 1; });
   const hub = Object.entries(hubCount).sort((a, b) => b[1] - a[1])[0]?.[0];
   return [...map.values()].filter((d) => d.to !== hub);
 }
@@ -32,7 +32,19 @@ export function render(root) {
   const firstDest = codes.find((c) => c !== hub) || hub;
   const today = todayISO();
   const dests = destinations(state);
-  const fleet = state.aircraft;
+  const fleetMap = new Map();
+  state.routes.filter((x) => isConfigured(x.aircraft?.config)).forEach((r) => fleetMap.set(r.aircraft.model + r.aircraft.name, r.aircraft));
+  const fleet = [...fleetMap.values()];
+  const pending = state.routes.length - state.routes.filter((x) => isConfigured(x.aircraft?.config)).length;
+
+  if (!codes.length) {
+    root.innerHTML = `<section class="section narrow"><div class="card empty">
+      <h1>${esc(state.airline.name)}</h1>
+      <p class="muted">${state.routes.length ? `Tienes ${pending} ruta(s) pendientes de configurar los asientos del avión. Cuando indiques la configuración, aparecerán aquí para reservar.` : 'Esta aerolínea aún no tiene rutas.'}</p>
+      <div class="actions" style="justify-content:center"><a class="btn btn-primary" href="#/calculator">Calcular una ruta</a><a class="btn btn-outline" href="#/admin/routes">Administrar rutas</a></div>
+    </div></section>`;
+    return;
+  }
 
   root.innerHTML = `
   <section class="hero">
@@ -89,7 +101,7 @@ export function render(root) {
         <article class="dest-card">
           <div class="dest-img" data-img-kind="aircraft" data-img-title="${esc(a.wiki || a.name)}"><span class="code">${esc(a.name)}</span></div>
           <div class="dest-body"><h3>${esc(a.name)}</h3>
-          <p class="muted">${a.config.map((c) => `${c.cls}${c.count}`).join(' · ')}</p></div>
+          <p class="muted">${a.config.filter((c) => c.count).map((c) => `${c.cls}${c.count}`).join(' · ')}</p></div>
         </article>`).join('')}
     </div></section>` : ''}`;
 

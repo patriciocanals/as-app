@@ -1,6 +1,7 @@
 import { $, $$, esc, timeSelect, readTime } from '../util.js';
 import { calculate, formatHM, suggestRefuel, REFUEL_OPTIONS, R2_MIN, CLASS_NAMES } from '../calc.js';
 import { go } from '../nav.js';
+import * as store from '../store.js';
 
 const KEY = 'airsim.calc';
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
@@ -76,7 +77,7 @@ export function render(root) {
       const n = Number(b.dataset.make);
       const sc = r.scenarios[n - 1];
       sessionStorage.setItem('airsim.draft', JSON.stringify({ t1: v.t1, t2: v.t2, r1: v.r1, aircraft: n, mode: r.mode, perPeriod: r.perPeriod, rt: r.rt, seats: sc.seats }));
-      go('/admin/route/new');
+      go(store.get() ? '/admin/route/new' : '/welcome');
     }));
   };
 

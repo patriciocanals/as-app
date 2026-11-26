@@ -6,7 +6,9 @@ Web app para jugar **en paralelo** a *Airline Simulator*:
 - **Sistema de reservas** estilo aerolínea: buscador ida / ida y vuelta, resultados por día, selección de cabina y asiento (mapa de asientos), reserva con código PNR.
 - **Ticket imprimible** (tarjeta de embarque con IATA grande, ciudad, nº de vuelo, horarios, clase y asiento) → *Imprimir / guardar PDF*.
 - **Banners dinámicos** con los destinos reales de tu aerolínea, banderas y fotos automáticas (sin claves de API).
-- **Administración**: aerolínea, flota (configuración de asientos por clase), rutas y programación semanal; importar/exportar JSON.
+- **Administración**: datos de la aerolínea, rutas y programación semanal; importar/exportar JSON.
+- **Varias aerolíneas** (hasta 6, como en el juego): cada una con su nombre, código de vuelo, color, rutas y reservas. Se cambia desde el menú de cabecera y se pueden abrir **a la vez en pestañas distintas** (la aerolínea activa va en la URL: `?a=<id>`).
+- **Catálogo de aviones** del juego (Airbus, Bombardier/Mitsubishi, Embraer, ATR, De Havilland, COMAC, Sukhoi). No hay ninguna configuración por defecto: la **configuración de asientos** (cuántos de F/B/W/Y y su distribución por fila) se introduce *después* de la calculadora, cuando ya la tienes montada en el juego. Una ruta sin configuración queda *pendiente* y no se vende.
 
 Sin backend ni build: HTML + CSS + JavaScript (módulos ES). Los datos viven en `localStorage`.
 
@@ -38,18 +40,19 @@ git push -u origin main
 
 ## Datos y publicación
 
-Cada visitante guarda sus datos en **su navegador**. Para que tu web publicada arranque con *tus* rutas y flota:
+Cada visitante guarda sus datos en **su navegador**. La primera vez que se abre la web (sin datos) se pide crear la primera aerolínea. Para que tu web publicada arranque con *tus* aerolíneas y rutas:
 
-1. En la web: **Administración → Datos → Exportar JSON**.
+1. En la web: **Administración → Datos → Exportar esta aerolínea** (o **Exportar todas**).
 2. Guarda el archivo como `data/seed.json` en el repositorio y haz push.
-3. Quien abra la web por primera vez (sin datos guardados) cargará ese archivo. (Sin `seed.json` se cargan datos de ejemplo.)
+3. Quien abra la web por primera vez (sin datos guardados) cargará ese archivo.
 
 ## Flujo de uso recomendado
 
 1. Evalúas una ruta nueva en **Calculadora** mientras juegas.
-2. Cuando la decides, pulsa **Crear ruta** → se abre el formulario con la programación generada.
-3. En el juego creas la programación real; vuelve y ajusta números de vuelo, horas y días.
-4. Pruebas la reserva: origen, destino, fecha → vuelos disponibles → asiento → ticket.
+2. Cuando la decides, pulsa **Crear ruta** → eliges el modelo de avión y se abre el formulario con la programación generada.
+3. En el juego montas la configuración del avión; vuelves a **Administración → Rutas → Configurar asientos** y la introduces.
+4. Ajusta números de vuelo, horas y días con los reales del juego.
+5. Pruebas la reserva: origen, destino, fecha → vuelos disponibles → asiento → ticket.
 
 ## Cómo se calcula
 
@@ -76,8 +79,9 @@ index.html  netlify.toml  package.json
 css/styles.css
 js/calc.js       motor de cálculo (puro, testeado)
 js/schedule.js   horarios, búsqueda de vuelos, mapa de asientos
-js/store.js      persistencia (localStorage + data/seed.json)
+js/aircraft.js   catálogo de modelos de avión
+js/store.js      persistencia multi-aerolínea (localStorage + data/seed.json)
 js/images.js     banderas e imágenes automáticas
-js/views/        home, results, book, ticket, manage, calculator, admin
+js/views/        home, results, book, ticket, manage, calculator, admin, welcome
 tests/           node --test
 ```

@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculate, parseHM, formatHM, suggestRefuel, autoSchedule } from '../js/calc.js';
-import { flightsOn, seatMap, weekday, addDays, availability } from '../js/schedule.js';
+import { flightsOn, seatMap, weekday, addDays, availability, isConfigured } from '../js/schedule.js';
+import { AIRCRAFT, AIRCRAFT_GROUPS, aircraftById } from '../js/aircraft.js';
+import { normalize } from '../js/store.js';
 
 const hm = parseHM;
 
@@ -62,9 +64,9 @@ test('autoSchedule diario y semanal', () => {
 // ---------- horarios ----------
 const state = {
   airline: { code: 'AW' },
-  aircraft: [{ id: 'a1', name: 'A320', config: [{ cls: 'F', count: 2, layout: '1-1' }, { cls: 'B', count: 4, layout: '1-1' }, { cls: 'W', count: 20, layout: '2-2' }, { cls: 'Y', count: 100, layout: '3-3' }] }],
   routes: [{
-    id: 'r1', origin: 'MAD', dest: 'LHR', aircraftId: 'a1', t1: 145, t2: 130, r1: 60, prices: { Y: 100 },
+    id: 'r1', origin: 'MAD', dest: 'LHR', t1: 145,
+    aircraft: { model: 'a320-200', name: 'Airbus A320-200', config: [{ cls: 'F', count: 2, layout: '1-1' }, { cls: 'B', count: 4, layout: '1-1' }, { cls: 'W', count: 20, layout: '2-2' }, { cls: 'Y', count: 100, layout: '3-3' }] }, t2: 130, r1: 60, prices: { Y: 100 },
     rotations: [{ id: 'x', outNo: 100, retNo: 101, outDep: '22:00', days: [0] }], // lunes 22:00
   }],
   bookings: [],
@@ -85,7 +87,7 @@ test('vuelos del día: ida el lunes, vuelta cruzando medianoche', () => {
 });
 
 test('mapa de asientos: F2B4W20Y100 -> F fila 1, B 2-3, W empieza en fila 4', () => {
-  const rows = seatMap(state.aircraft[0].config);
+  const rows = seatMap(state.routes[0].aircraft.config);
   assert.deepEqual(rows[0].seats.map((s) => s.id), ['1A', '1B']);
   assert.equal(rows.find((r) => r.cls === 'W').row, 4);
   assert.equal(rows.flatMap((r) => r.seats).length, 126);
@@ -96,4 +98,36 @@ test('disponibilidad descuenta reservas', () => {
   const st = { ...state, bookings: [{ segments: [{ key: f.key, seats: ['1A'] }] }] };
   assert.equal(availability(st, f, 'F'), 1);
   assert.equal(addDays('2026-12-31', 1), '2027-01-01');
+});
+
+// ---------- versión 2 ----------
+test('ruta sin configuración de asientos queda pendiente y no se vende', () => {
+  const pending = { ...state, routes: [{ ...state.routes[0], aircraft: { model: 'a320-200', name: 'Airbus A320-200', config: null } }] };
+  assert.equal(isConfigured(pending.routes[0].aircraft.config), false);
+  assert.equal(flightsOn(pending, 'MAD', 'LHR', '2026-11-30').length, 0);
+  assert.equal(isConfigured([{ cls: 'Y', count: 0, layout: '3-3' }]), false);
+  assert.equal(isConfigured(state.routes[0].aircraft.config), true);
+});
+
+test('catálogo: 51 modelos de la lista, ids únicos, ninguno con configuración por defecto', () => {
+  assert.equal(AIRCRAFT.length, 51);
+  assert.equal(new Set(AIRCRAFT.map((a) => a.id)).size, 51);
+  assert.deepEqual(AIRCRAFT_GROUPS.map((g) => g.models.length), [23, 6, 11, 2, 4, 3, 2]);
+  assert.ok(AIRCRAFT.every((a) => !('config' in a) && !('seats' in a)));
+  assert.equal(aircraftById('a350-1000ulr').name, 'Airbus A350-1000 ULR');
+  assert.equal(aircraftById('q400').group, 'De Havilland Canada');
+});
+
+test('normalize: datos de la v1 (flota aparte) se convierten al avión dentro de la ruta', () => {
+  const v1 = {
+    airline: { name: 'Vieja', code: 'VI' },
+    aircraft: [{ id: 'a1', name: 'Airbus A320', config: [{ cls: 'Y', count: 150, layout: '3-3' }] }],
+    routes: [{ id: 'r', origin: 'MAD', dest: 'BCN', aircraftId: 'a1', t1: 60, t2: 60, r1: 60, prices: {}, rotations: [] }],
+  };
+  const n = normalize(v1);
+  assert.equal(n.routes[0].aircraft.name, 'Airbus A320');
+  assert.equal(n.routes[0].aircraft.config[0].count, 150);
+  assert.equal(n.routes[0].aircraftId, undefined);
+  assert.equal(n.airline.currency, '€'); // rellena valores que faltan
+  assert.deepEqual(normalize({}).routes, []);
 });
