@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reservas · Airline Simulator WebApp</title>
+  <meta name="description" content="Reserva de vuelos y calculadora de rutas para jugar en paralelo a Airline Simulator.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a3d91'/%3E%3Cpath d='M14 36l36-16-8 24-10-8-8 6 2-10z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip" href="#app">Saltar al contenido</a>
+  <header class="site-header no-print">
+    <div class="bar">
+      <a href="#/" id="brand" class="brand" aria-label="Inicio"></a>
+      <button id="burger" class="burger" aria-label="Menú" aria-controls="menu">☰</button>
+      <nav id="menu" class="menu">
+        <a href="#/" data-nav="home">Reservar</a>
+        <a href="#/manage" data-nav="manage">Mis reservas</a>
+        <a href="#/calculator" data-nav="calculator">Calculadora</a>
+        <a href="#/admin/routes" data-nav="admin">Administración</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="app" tabindex="-1"></main>
+
+  <footer class="site-footer no-print">
+    <p><span id="footer-name"></span> · Proyecto de simulación para jugar en paralelo a Airline Simulator. Los datos se guardan en tu navegador.</p>
+  </footer>
+  <div id="toast" class="toast" role="status"></div>
+
+  <noscript><p style="padding:2rem">Esta web necesita JavaScript.</p></noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
