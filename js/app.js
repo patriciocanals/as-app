@@ -41,6 +41,15 @@ function render() {
   document.getElementById('menu')?.classList.remove('open');
 }
 
+// al entrar en un campo numérico se selecciona su contenido al instante: lo que escribes lo sustituye (no hay que borrar el 0).
+// El mouseup se cancela una vez para que el navegador no deshaga la selección al soltar el clic.
+document.addEventListener('focusin', (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+  try { el.select(); } catch { /* ignorar */ }
+  el.addEventListener('mouseup', (ev) => ev.preventDefault(), { once: true });
+});
+
 (async function boot() {
   document.getElementById('burger').addEventListener('click', () => document.getElementById('menu').classList.toggle('open'));
   await sync.detect();

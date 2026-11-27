@@ -52,3 +52,29 @@ test('resumen de Wikipedia: descarta la bandera; no pide miniaturas mayores que 
   }), 'https://upload.wikimedia.org/wikipedia/commons/a/ab/ATR.jpg');
   assert.equal(pickWikiSummary({}), null);
 });
+
+// ---------- regresión: fotos de otra ciudad (Sídney para Alice Springs) ----------
+import { searchName, EN_NAMES } from '../js/airports.js';
+
+test('require: la foto debe nombrar la ciudad (no sirve una genérica de Australia/Sídney)', () => {
+  const r = resp(
+    page('File:Sydney skyline at dusk.jpg', 4000, 2500, 'image/jpeg', 1),
+    page('File:Australia outback panorama.jpg', 4000, 2000, 'image/jpeg', 2),
+    page('File:Alice Springs from Anzac Hill.jpg', 4000, 2600, 'image/jpeg', 7),
+  );
+  const urls = pickCommons(r, { prefer: 'Alice Springs', require: ['Alice Springs'] });
+  assert.equal(urls.length, 1);
+  assert.ok(decodeURIComponent(urls[0]).includes('Alice Springs'));
+  // sin ninguna foto que nombre la ciudad: no devuelve nada (pasa al siguiente método en vez de poner Sídney)
+  assert.deepEqual(pickCommons(resp(page('File:Sydney skyline.jpg', 4000, 2500)), { require: ['Alice Springs'] }), []);
+  // insensible a acentos y mayúsculas
+  assert.equal(pickCommons(resp(page('File:BOGOTA centro.jpg', 4000, 2500)), { require: ['Bogotá'] }).length, 1);
+  // varios nombres válidos (inglés o como se escribió)
+  assert.equal(pickCommons(resp(page('File:London Eye.jpg', 4000, 2500)), { require: ['London', 'Londres'] }).length, 1);
+});
+
+test('nombres de búsqueda en inglés para ciudades con nombre español', () => {
+  assert.equal(searchName('Londres'), 'London'); assert.equal(searchName('Nueva York'), 'New York');
+  assert.equal(searchName('Alice Springs'), 'Alice Springs'); // ciudad personalizada: tal cual
+  assert.ok(Object.keys(EN_NAMES).length > 60);
+});

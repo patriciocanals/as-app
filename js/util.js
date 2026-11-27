@@ -1,5 +1,5 @@
 import * as store from './store.js';
-import { AIRPORTS, countryName } from './airports.js';
+import { AIRPORTS, countryName, searchName } from './airports.js';
 import { flagUrl } from './images.js';
 import { clock, DAY } from './calc.js';
 import { fromISO, isConfigured } from './schedule.js';
@@ -79,7 +79,7 @@ export { DAY };
 export function destImageAttrs(code) {
   const a = airport(code);
   const ov = store.get()?.destImages?.[code] || '';
-  return `data-img-kind="dest" data-img-title="${esc(a.city)}" data-img-country="${esc(a.cc ? countryName(a.cc) : '')}" data-img-ov="${esc(ov)}"`;
+  return `data-img-kind="dest" data-img-title="${esc(a.city)}" data-img-alt="${esc(searchName(a.city))}" data-img-country="${esc(a.cc ? countryName(a.cc) : '')}" data-img-ov="${esc(ov)}"`;
 }
 
 /** Hora del día con selectores de hora y minutos (de 5 en 5). Si el valor trae otro minuto, se conserva como opción extra. */

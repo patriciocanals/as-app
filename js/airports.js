@@ -144,3 +144,22 @@ export function countryName(cc) {
     return cc;
   }
 }
+
+// Nombre en inglés de las ciudades cuyo nombre en español difiere (los títulos de Wikimedia Commons están en inglés).
+export const EN_NAMES = {
+  'Londres': 'London', 'París': 'Paris', 'Nueva York': 'New York', 'Ciudad de México': 'Mexico City', 'Roma': 'Rome',
+  'Milán': 'Milan', 'Venecia': 'Venice', 'Nápoles': 'Naples', 'Múnich': 'Munich', 'Fráncfort': 'Frankfurt', 'Viena': 'Vienna',
+  'Lisboa': 'Lisbon', 'Oporto': 'Porto', 'Dublín': 'Dublin', 'Edimburgo': 'Edinburgh', 'Mánchester': 'Manchester',
+  'Ámsterdam': 'Amsterdam', 'Bruselas': 'Brussels', 'Zúrich': 'Zurich', 'Ginebra': 'Geneva', 'Atenas': 'Athens',
+  'Estambul': 'Istanbul', 'Copenhague': 'Copenhagen', 'Estocolmo': 'Stockholm', 'Reikiavik': 'Reykjavik', 'Varsovia': 'Warsaw',
+  'Praga': 'Prague', 'Bucarest': 'Bucharest', 'Moscú': 'Moscow', 'Dubái': 'Dubai', 'Abu Dabi': 'Abu Dhabi', 'Riad': 'Riyadh',
+  'El Cairo': 'Cairo', 'Argel': 'Algiers', 'Túnez': 'Tunis', 'Acra': 'Accra', 'Adís Abeba': 'Addis Ababa',
+  'Johannesburgo': 'Johannesburg', 'Ciudad del Cabo': 'Cape Town', 'Los Ángeles': 'Los Angeles', 'Montreal': 'Montreal',
+  'La Habana': 'Havana', 'Cuzco': 'Cusco', 'Santiago de Chile': 'Santiago', 'Río de Janeiro': 'Rio de Janeiro',
+  'Bombay': 'Mumbai', 'Nueva Delhi': 'New Delhi', 'Yakarta': 'Jakarta', 'Pekín': 'Beijing', 'Shanghái': 'Shanghai',
+  'Cantón': 'Guangzhou', 'Seúl': 'Seoul', 'Tokio': 'Tokyo', 'Sídney': 'Sydney', 'Singapur': 'Singapore', 'Hamburgo': 'Hamburg',
+  'Berlín': 'Berlin', 'Niza': 'Nice', 'Sevilla': 'Seville', 'Málaga': 'Malaga', 'Palma de Mallorca': 'Palma de Mallorca',
+  'Ciudad de Panamá': 'Panama City', 'San José': 'San Jose', 'Bogotá': 'Bogota', 'Medellín': 'Medellin', 'Asunción': 'Asuncion',
+  'Brasilia': 'Brasilia', 'Santa Cruz de la Sierra': 'Santa Cruz de la Sierra', 'Bali': 'Bali', 'Cancún': 'Cancun',
+};
+export const searchName = (city) => EN_NAMES[city] || city;

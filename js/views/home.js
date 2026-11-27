@@ -9,26 +9,34 @@ let timer;
 
 const sellable = (state) => state.routes.filter((x) => isConfigured(x.aircraft?.config));
 
-function hubOf(routes) {
+/** Hub principal = el aeropuerto que más veces es origen de una ruta. */
+export function hubOf(routes) {
   const n = {};
-  routes.forEach((r) => { n[r.origin] = (n[r.origin] || 0) + 1; n[r.dest] = (n[r.dest] || 0) + 1; });
+  routes.forEach((r) => { n[r.origin] = (n[r.origin] || 0) + 1; });
   return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0];
 }
 
-function destinations(routes) {
-  // Destinos reales de la compañía, con el precio "desde" más bajo (el del hub no se destaca)
-  const map = new Map();
-  for (const r of routes) {
-    const prices = Object.values(r.prices).filter((p) => p > 0);
-    if (!prices.length) continue;
-    const price = Math.min(...prices);
-    for (const [from, to] of [[r.origin, r.dest], [r.dest, r.origin]]) {
-      const cur = map.get(to);
-      if (!cur || price < cur.price) map.set(to, { from, to, price });
+/**
+ * Destinos a anunciar: el DESTINO de cada ruta. Todo aeropuerto que es origen de alguna ruta es un hub
+ * (puede haber varios) y no se anuncia: si no, ADL-ASP anunciaría "visita Adelaida" y "visita Alice Springs".
+ */
+export function destinations(routes) {
+  const hubs = new Set(routes.map((r) => r.origin));
+  const pick = (skip) => {
+    const map = new Map();
+    for (const r of routes) {
+      if (skip(r.dest)) continue;
+      const prices = Object.values(r.prices).filter((p) => p > 0);
+      if (!prices.length) continue;
+      const price = Math.min(...prices);
+      const cur = map.get(r.dest);
+      if (!cur || price < cur.price) map.set(r.dest, { from: r.origin, to: r.dest, price });
     }
-  }
-  const hub = hubOf(routes);
-  return [...map.values()].filter((d) => d.to !== hub);
+    return [...map.values()];
+  };
+  const found = pick((c) => hubs.has(c));
+  // rutas definidas en ambos sentidos (A-B y B-A): todos serían hubs; entonces solo se aparta el hub principal
+  return found.length ? found : pick((c) => c === hubOf(routes));
 }
 
 export function render(root) {

@@ -216,7 +216,7 @@ function routeForm(el, id) {
       <label>Distribución por fila<input name="l-${c}" value="${esc(cfg(c)?.count ? cfg(c).layout : '')}" placeholder="p. ej. 3-3"></label></div>`).join('')}
 
     <h3>Precio por pasajero y tramo (${esc(s.airline.currency)}) <small class="muted">— 0 = clase no disponible</small></h3>
-    <div class="row">${CLS.map((c) => `<label>${c} · ${CLASS_NAMES[c]}<input type="number" min="0" name="p-${c}" value="${r.prices[c] || 0}"></label>`).join('')}</div>
+    <div class="row">${CLS.map((c) => `<label>${c} · ${CLASS_NAMES[c]}<input type="number" min="0" name="p-${c}" value="${r.prices[c] || ''}" placeholder="0" inputmode="numeric"></label>`).join('')}</div>
 
     <h3>Programación semanal</h3>
     <p class="muted small">Cada fila es una rotación: ida (nº de vuelo + hora de salida) y vuelta. La vuelta sale por defecto tras T1 + R1. Marca los días de salida de la ida (L–D).</p>
