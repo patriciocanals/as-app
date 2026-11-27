@@ -123,3 +123,15 @@ export function makePNR(existing = new Set()) {
   } while (existing.has(s));
   return s;
 }
+
+/** Aeropuertos a los que se puede volar desde `origin` (las rutas se venden en ambos sentidos; solo rutas configuradas). */
+export function reachableFrom(state, origin) {
+  const set = new Set();
+  for (const r of state.routes) {
+    if (!isConfigured(r.aircraft?.config)) continue;
+    if (r.origin === origin) set.add(r.dest);
+    if (r.dest === origin) set.add(r.origin);
+  }
+  set.delete(origin);
+  return [...set].sort();
+}

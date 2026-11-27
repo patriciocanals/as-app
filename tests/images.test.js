@@ -78,3 +78,19 @@ test('nombres de búsqueda en inglés para ciudades con nombre español', () => 
   assert.equal(searchName('Alice Springs'), 'Alice Springs'); // ciudad personalizada: tal cual
   assert.ok(Object.keys(EN_NAMES).length > 60);
 });
+
+import { mentions, aircraftTerms } from '../js/images.js';
+test('mentions: palabras completas (Nice no encaja en Venice) y modelos sin importar guiones', () => {
+  assert.equal(mentions('File:Venice skyline.jpg', 'Nice'), false);
+  assert.equal(mentions('File:Nice - Promenade.jpg', 'Nice'), true);
+  assert.equal(mentions('File:Garuda Bombardier CRJ-1000 PK.jpg', 'CRJ1000', true), true);
+  assert.equal(mentions('File:Airline CRJ-1000.jpg', 'CRJ100', true), false);
+});
+test('modelos parecidos no comparten foto: CRJ900/CRJ1000, A350-900/A350-1000, Q100/Q400, A220-100/300', () => {
+  const pg = (t) => ({ query: { pages: { 1: { title: t, index: 1, imageinfo: [{ mime: 'image/jpeg', width: 4000, height: 2500, thumburl: 'u' }] } } } });
+  const ok = (model, name, title) => pickCommons(pg(title), { require: aircraftTerms(model, name), squash: true }).length === 1;
+  assert.ok(ok('crj1000', 'CRJ1000', 'File:Bombardier CRJ-1000 EI-X.jpg')); assert.ok(!ok('crj900', 'CRJ900', 'File:Bombardier CRJ-1000 EI-X.jpg'));
+  assert.ok(ok('a350-1000', 'Airbus A350-1000', 'File:Airbus A350-1000 F-WMIL.jpg')); assert.ok(!ok('a350-900', 'Airbus A350-900', 'File:Airbus A350-1000 F-WMIL.jpg'));
+  assert.ok(ok('q400', 'De Havilland Q400', 'File:Bombardier Dash 8 Q400 C-FSRF.jpg')); assert.ok(!ok('q100', 'De Havilland Q100', 'File:Bombardier Dash 8 Q400 C-FSRF.jpg'));
+  assert.ok(ok('a220-300', 'Airbus A220-300', 'File:Airbus A220-300 (CS300) HB-JCA.jpg')); assert.ok(!ok('a220-100', 'Airbus A220-100', 'File:Airbus A220-300 (CS300) HB-JCA.jpg'));
+});

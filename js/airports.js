@@ -163,3 +163,32 @@ export const EN_NAMES = {
   'Brasilia': 'Brasilia', 'Santa Cruz de la Sierra': 'Santa Cruz de la Sierra', 'Bali': 'Bali', 'Cancún': 'Cancun',
 };
 export const searchName = (city) => EN_NAMES[city] || city;
+
+// Lista de países (nombre en español -> código ISO-2), generada con Intl: así no hay que saberse los códigos de 2 letras.
+const NOT_COUNTRY = new Set(['AC', 'CP', 'DG', 'EA', 'IC', 'TA', 'XA', 'XB', 'EU', 'EZ', 'UN', 'ZZ', 'QO']);
+let countries = null;
+export function countryList() {
+  if (countries) return countries;
+  const out = [];
+  try {
+    const dn = new Intl.DisplayNames(['es'], { type: 'region' });
+    for (let a = 65; a <= 90; a++) {
+      for (let b = 65; b <= 90; b++) {
+        const cc = String.fromCharCode(a, b);
+        if (NOT_COUNTRY.has(cc)) continue;
+        let name;
+        try { name = dn.of(cc); } catch { continue; }
+        if (name && name !== cc) out.push({ cc, name });
+      }
+    }
+  } catch { /* sin Intl.DisplayNames */ }
+  out.sort((x, y) => x.name.localeCompare(y.name, 'es'));
+  countries = out;
+  return out;
+}
+
+/** Nombre de aeropuerto a partir de la ciudad, para no tener que teclearlo: kind = 'intl' | 'apt'. */
+export function autoAirportName(city, kind) {
+  if (kind === 'intl') return `Aeropuerto Internacional de ${city}`;
+  return `Aeropuerto de ${city}`;
+}

@@ -241,3 +241,16 @@ table.rt th, table.rt td { padding: 7px 8px; vertical-align: middle; } table.rt 
 .slide.img-ready::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.1), rgba(0,0,0,.6)); }
 .slide-text { position: relative; }
 .more-wrap { text-align: center; margin-top: 18px; } .dest[hidden] { display: none; }
+
+/* ---- Admin: rutas agrupadas por hub ---- */
+.rt-count-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hubgrp { padding: 0; margin-bottom: 8px; overflow: hidden; }
+.hubhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 4px 8px 4px 4px; }
+.hubtoggle { flex: 1; min-width: 220px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 0; background: none; cursor: pointer; padding: 10px 10px; text-align: left; font: inherit; color: inherit; border-radius: 8px; }
+.hubtoggle:hover { background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
+.hubtoggle strong { font-size: 1.05rem; color: var(--primary); } .hubcity { font-weight: 600; } .chev { width: 16px; color: var(--muted); }
+.feat { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--muted); cursor: pointer; }
+.hubgrp .rt-card { border-top: 1px solid var(--line); padding: 4px 8px 8px; }
+.hubgrp .more-wrap { text-align: center; margin: 8px 0 2px; }
+.aptedit { align-items: end; } .retno b { color: var(--muted); }
+.dest-info p.dest-from { margin: 0 0 10px; font-weight: 600; }

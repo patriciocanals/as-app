@@ -54,6 +54,7 @@ export function normalize(d = {}) {
     routes,
     customAirports: d.customAirports || {},
     destImages: d.destImages || {},
+    featuredHubs: Array.isArray(d.featuredHubs) ? d.featuredHubs : [],
     bookings: d.bookings || [],
   };
 }
